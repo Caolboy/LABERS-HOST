@@ -39,6 +39,7 @@ const iconColor = computed(() => {
   <div class="relative">
     <input
       v-model="modelValue"
+      v-bind="$attrs"
       :type="inputType"
       data-slot="input"
       :class="cn(

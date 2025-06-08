@@ -23,7 +23,7 @@ class VerifyEmailController extends Controller
 
         if ($user->markEmailAsVerified()) {
             event(new Verified($user));
-        }
+        } 
 
         if ($user->is_admin) {
             return redirect()->intended(route('dashboard', absolute: false) . '?verified=1');

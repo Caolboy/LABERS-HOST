@@ -15,28 +15,52 @@
 
       <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <h3 class="text-sm font-medium text-gray-700 mb-3">Booking Summary</h3>
-        <div class="space-y-3">
-          <div class="flex justify-between items-start">
-            <span class="text-sm text-gray-600">Category:</span>
-            <span class="text-sm font-medium text-gray-900">{{ category.name }}</span>
-          </div>
+        <div class="space-y-4">
           
-          <div class="flex justify-between items-start">
-            <span class="text-sm text-gray-600">Item:</span>
-            <div class="text-right">
-              <span class="text-sm font-medium text-gray-900">{{ item.name }}</span>
-              <span class="text-xs text-gray-500 block capitalize">({{ item.type }})</span>
-            </div>
-          </div>
-          
+          <!-- Date -->
           <div class="flex justify-between items-start">
             <span class="text-sm text-gray-600">Date:</span>
             <span class="text-sm font-medium text-gray-900">{{ formatDate(date) }}</span>
           </div>
           
-          <div v-if="item.type === 'room'" class="flex justify-between items-start">
-            <span class="text-sm text-gray-600">Time:</span>
-            <span class="text-sm font-medium text-gray-900">{{ time }}</span>
+          <!-- Selected Items -->
+          <div class="border-t pt-3">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Selected Items ({{ selectedItems.length }})</h4>
+            <div class="space-y-3">
+              <div v-for="item in selectedItems" :key="item.id + '-' + item.type" class="bg-white p-3 rounded border">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <span class="text-sm font-medium text-gray-900">{{ item.name }}</span>
+                    <span class="text-xs text-gray-500 block capitalize">({{ item.type }})</span>
+                    <span v-if="item.lab_name" class="text-xs text-gray-500 block">{{ item.lab_name }}</span>
+                  </div>
+                  <div class="text-right text-sm">
+                    <span v-if="item.type === 'equipment'" class="text-gray-600">
+                      Qty: {{ item.quantity || 1 }}
+                    </span>
+                    <div v-if="item.type === 'room' && getRoomTimeSelection(item.id)" class="text-gray-600">
+                      {{ getRoomTimeSelection(item.id).startTime }} - {{ getRoomTimeSelection(item.id).endTime }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="missingTimeSelections.length > 0" class="border-t pt-3">
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div class="flex items-start">
+                <svg class="w-5 h-5 text-yellow-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <h4 class="text-sm font-medium text-yellow-800">Missing Time Selections</h4>
+                  <p class="text-sm text-yellow-700 mt-1">
+                    Please select time slots for: {{ missingTimeSelections.join(', ') }}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -80,11 +104,11 @@
         @click="submitBooking"
         :class="[
           'px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center',
-          loading || success
+          loading || success || !canConfirmBooking
             ? 'bg-gray-400 text-white cursor-not-allowed'
             : 'bg-orange-500 text-white hover:bg-orange-600'
         ]"
-        :disabled="loading || success"
+        :disabled="loading || success || !canConfirmBooking"
       >
         <svg v-if="loading" class="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -100,21 +124,50 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
 
 const props = defineProps({
-  category:     Object,
-  item:         Object,
-  date:         String,
-  time:         String,
-  time_slot_id: Number,   
+  selectedItems: {
+    type: Array,
+    required: true,
+    default: () => []
+  },
+  date: {
+    type: String,
+    required: true
+  },
+  roomTimeSelections: {
+    type: Object,
+    default: () => ({})
+  }
 })
 
-const emit    = defineEmits(['back', 'complete'])
+const emit = defineEmits(['back', 'complete'])
 const loading = ref(false)
 const success = ref(false)
-const error   = ref(null)
+const error = ref(null)
+
+const missingTimeSelections = computed(() => {
+  const roomItems = props.selectedItems.filter(item => item.type === 'room')
+  return roomItems
+    .filter(room => !getRoomTimeSelection(room.id))
+    .map(room => room.name)
+})
+
+const canConfirmBooking = computed(() => {
+  return props.selectedItems.length > 0 && missingTimeSelections.value.length === 0
+})
+
+watch([() => props.selectedItems, () => props.date, () => props.roomTimeSelections], () => {
+  success.value = false
+  error.value = null
+}, { deep: true })
+
+onMounted(() => {
+  success.value = false
+  error.value = null
+})
 
 function formatDate(dateString) {
   if (!dateString) return ''
@@ -127,24 +180,68 @@ function formatDate(dateString) {
   })
 }
 
+function getRoomTimeSelection(roomId) {
+  return props.roomTimeSelections[roomId] || null
+}
+
 async function submitBooking() {
   loading.value = true
-  error.value   = null
+  error.value = null
   success.value = false
 
   try {
-    await axios.post('/bookings', {
-      category_id:   props.category.id,
-      item_id:       props.item.id,
-      item_type:     props.item.type,
-      date:          props.date,
-      time:          props.time,
-      time_slot_id:  props.time_slot_id,
-    })
+    if (!props.selectedItems || props.selectedItems.length === 0) {
+      throw new Error('No items selected for booking')
+    }
+
+    const roomItems = props.selectedItems.filter(item => item.type === 'room')
+    for (const room of roomItems) {
+      const timeSelection = getRoomTimeSelection(room.id)
+      if (!timeSelection || !timeSelection.startTime || !timeSelection.endTime) {
+        throw new Error(`Time selection missing for room ${room.name}`)
+      }
+    }
+
+    const payload = {
+      selected_items: props.selectedItems,
+      date: props.date
+    }
+
+    if (roomItems.length === 1) {
+      const roomTimeSelection = getRoomTimeSelection(roomItems[0].id)
+      payload.start_time = roomTimeSelection.startTime
+      payload.end_time = roomTimeSelection.endTime
+    }
+
+    payload.room_time_selections = props.roomTimeSelections
+
+    console.log('Submitting booking payload:', payload)
+
+    const response = await axios.post('/bookings', payload)
+    
+    console.log('Booking response:', response.data)
+    
     success.value = true
-    emit('complete')
+    
+    setTimeout(() => {
+      emit('complete')
+    }, 1500)
+    
   } catch (e) {
-    error.value = e.response?.data?.message || e.message
+    console.error('Booking error:', e)
+    
+    let errorMessage = 'An error occurred while processing your booking'
+    
+    if (e.response?.data?.message) {
+      errorMessage = e.response.data.message
+    } else if (e.response?.data?.errors) {
+      const validationErrors = Object.values(e.response.data.errors).flat()
+      errorMessage = validationErrors.join(', ')
+    } else if (e.message) {
+      errorMessage = e.message
+    }
+    
+    error.value = errorMessage
   } finally {
     loading.value = false
   }

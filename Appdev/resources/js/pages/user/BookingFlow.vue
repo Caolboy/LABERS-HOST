@@ -39,8 +39,8 @@
             <div v-if="currentStep === 1" key="step-1">
               <StepItem
                 :items="items"
-                :selectedItem="selectedItem"
-                @update:selectedItem="(val) => (selectedItem = val)"
+                :selectedItem="selectedItems"
+                @update:selectedItem="(val) => (selectedItems = val)"
                 @next="nextStep"
                 @back="prevStep"
               />
@@ -52,7 +52,12 @@
                 </div>
                 <div class="flex-1">
                   <h3 class="text-sm font-medium text-gray-600">Select a Room or Equipment</h3>
-                  <p class="text-sm text-gray-500">{{ selectedItem?.name }} ({{ selectedItem?.type }})</p>
+                  <p class="text-sm text-gray-500">
+                    {{ selectedItems.length }} item(s) selected
+                    <template v-if="selectedItems.length <= 2">
+                      : {{ selectedItems.map(item => `${item.name}${item.type === 'equipment' ? ` (${item.quantity})` : ''}`).join(', ') }}
+                    </template>
+                  </p>
                 </div>
               </div>
             </div>
@@ -65,9 +70,18 @@
           <transition name="step-slide" mode="out-in">
             <div v-if="currentStep === 2" key="step-2">
               <StepDateTime
-                :selectedItem="selectedItem"
-                :selectedDateTime="selectedDateTime"
-                @update:selectedDateTime="(val) => (selectedDateTime = val)"
+                v-if="isSingleSelection"
+                :selectedItem="selectedItems[0]"
+                :selectedDateTime="singleDateTime"
+                @update:selectedDateTime="handleSingleDateTimeUpdate"
+                @next="nextStep"
+                @back="prevStep"
+              />
+              <StepDateTime
+                v-else
+                :selectedItems="selectedItems"
+                :selectedDateTimes="selectedDateTimes"
+                @update:selectedDateTimes="handleMultipleDateTimeUpdate"
                 @next="nextStep"
                 @back="prevStep"
               />
@@ -79,10 +93,19 @@
                 </div>
                 <div class="flex-1">
                   <h3 class="text-sm font-medium text-gray-600">Select Date & Time</h3>
-                  <p class="text-sm text-gray-500">
-                    {{ formatDate(selectedDateTime.date) }}
-                    <span v-if="selectedItem?.type === 'room' && selectedDateTime.time"> - {{ selectedDateTime.time }}</span>
-                  </p>
+                  <div class="text-sm text-gray-500">
+                    <div v-if="isMultipleRooms">
+                      <!-- Multiple rooms display -->
+                      <div v-for="(room, index) in roomItems" :key="room.id" class="mb-1">
+                        <span class="font-medium">{{ room.name }}:</span>
+                        {{ formatDateTimeForRoom(room.id) }}
+                      </div>
+                    </div>
+                    <div v-else>
+                      <!-- Single room or equipment display -->
+                      {{ formatSingleDateTime() }}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -95,11 +118,9 @@
           <transition name="step-slide" mode="out-in">
             <div v-if="currentStep === 3" key="step-3">
               <StepConfirm
-                :category="selectedCategory"
-                :item="selectedItem"
-                :date="selectedDateTime.date"
-                :time_slot_id="selectedDateTime.time_slot_id"
-                :time="selectedDateTime.time"
+                :selectedItems="selectedItems"
+                :date="getBookingDate()"
+                :roomTimeSelections="getRoomTimeSelections()"
                 @back="prevStep"
                 @complete="handleComplete"
               />
@@ -152,18 +173,87 @@ const currentStep = ref(0)
 const categories = ref([])
 const selectedCategory = ref(null)
 const items = ref([])
-const selectedItem = ref(null)
-const selectedDateTime = ref({ date: '', time: '', time_slot_id: null })
+const selectedItems = ref([])
+
+// Separate data structures for single vs multiple selections
+const singleDateTime = ref({}) // For single item selections
+const selectedDateTimes = ref({}) // For multiple item selections
 
 const showModal = ref(false)
 
-const handleComplete = () => {
-  showModal.value = true
+// Computed properties
+const hasRoomSelected = computed(() => {
+  return selectedItems.value.some(item => item.type === 'room')
+})
+
+const roomItems = computed(() => {
+  return selectedItems.value.filter(item => item.type === 'room')
+})
+
+const isMultipleRooms = computed(() => {
+  return roomItems.value.length > 1
+})
+
+const isSingleSelection = computed(() => {
+  return selectedItems.value.length === 1
+})
+
+// Handle date time updates from child component
+const handleSingleDateTimeUpdate = (dateTimeData) => {
+  singleDateTime.value = dateTimeData || {}
 }
 
-const closeModal = () => {
-  showModal.value = false
-  router.get(route('bookinghistory'))
+const handleMultipleDateTimeUpdate = (dateTimeData) => {
+  selectedDateTimes.value = dateTimeData || {}
+}
+
+// Helper functions for StepConfirm
+const getBookingDate = () => {
+  if (isSingleSelection.value) {
+    return singleDateTime.value.date || ''
+  } else {
+    // Get the first available date from selectedDateTimes
+    const firstDateTime = Object.values(selectedDateTimes.value)[0]
+    return firstDateTime?.date || ''
+  }
+}
+
+const getRoomTimeSelections = () => {
+  const roomTimeSelections = {}
+  
+  if (isSingleSelection.value) {
+    // Handle single selection
+    const singleItem = selectedItems.value[0]
+    if (singleItem && singleItem.type === 'room' && singleDateTime.value.start_time && singleDateTime.value.end_time) {
+      roomTimeSelections[singleItem.id] = {
+        startTime: singleDateTime.value.start_time,
+        endTime: singleDateTime.value.end_time
+      }
+    }
+  } else {
+    // Handle multiple selections
+    Object.keys(selectedDateTimes.value).forEach(itemId => {
+      const dateTime = selectedDateTimes.value[itemId]
+      if (dateTime && dateTime.start_time && dateTime.end_time) {
+        roomTimeSelections[itemId] = {
+          startTime: dateTime.start_time,
+          endTime: dateTime.end_time
+        }
+      }
+    })
+  }
+  
+  return roomTimeSelections
+}
+
+// Helper functions for display
+const formatTime = (time) => {
+  if (!time) return ''
+  const [hour, minute] = time.split(':')
+  const hourInt = parseInt(hour)
+  const period = hourInt >= 12 ? 'PM' : 'AM'
+  const displayHour = hourInt > 12 ? hourInt - 12 : hourInt === 0 ? 12 : hourInt
+  return `${displayHour}:${minute} ${period}`
 }
 
 const formatDate = (dateString) => {
@@ -174,6 +264,51 @@ const formatDate = (dateString) => {
     day: 'numeric',
     year: 'numeric'
   })
+}
+
+const formatDateTimeForRoom = (roomId) => {
+  let dateTime
+  
+  if (isSingleSelection.value && selectedItems.value[0]?.id === roomId) {
+    dateTime = singleDateTime.value
+  } else {
+    dateTime = selectedDateTimes.value[roomId]
+  }
+  
+  if (!dateTime) return 'Not scheduled'
+  
+  let result = formatDate(dateTime.date)
+  if (dateTime.start_time && dateTime.end_time) {
+    result += ` - ${formatTime(dateTime.start_time)} - ${formatTime(dateTime.end_time)}`
+  }
+  return result
+}
+
+const formatSingleDateTime = () => {
+  if (isSingleSelection.value) {
+    const singleItem = selectedItems.value[0]
+    if (singleItem.type === 'room') {
+      return formatDateTimeForRoom(singleItem.id)
+    } else {
+      // Equipment only
+      return singleDateTime.value.date ? formatDate(singleDateTime.value.date) : 'No date selected'
+    }
+  } else if (roomItems.value.length === 1) {
+    return formatDateTimeForRoom(roomItems.value[0].id)
+  }
+  
+  // For equipment only in multiple selection, show the shared date
+  const firstDateTime = Object.values(selectedDateTimes.value)[0]
+  return firstDateTime ? formatDate(firstDateTime.date) : 'No date selected'
+}
+
+const handleComplete = () => {
+  showModal.value = true
+}
+
+const closeModal = () => {
+  showModal.value = false
+  router.get(route('bookinghistory'))
 }
 
 onMounted(async () => {
@@ -188,7 +323,9 @@ onMounted(async () => {
 watch(selectedCategory, async (newCat) => {
   if (!newCat) {
     items.value = []
-    selectedItem.value = null
+    selectedItems.value = []
+    singleDateTime.value = {}
+    selectedDateTimes.value = {}
     return
   }
   try {
@@ -196,19 +333,61 @@ watch(selectedCategory, async (newCat) => {
       params: { category_id: newCat.id }
     })
     items.value = data
-    selectedItem.value = null
+    selectedItems.value = []
+    singleDateTime.value = {}
+    selectedDateTimes.value = {}
   } catch (error) {
     console.error('Failed to fetch items:', error)
   }
 })
 
+// Watch for changes in selected items and reset date/time selections
+watch(selectedItems, (newItems, oldItems) => {
+  // Reset both date/time structures when items change
+  singleDateTime.value = {}
+  selectedDateTimes.value = {}
+}, { deep: true })
+
 const nextStep = () => {
   if (currentStep.value === 0 && !selectedCategory.value) return
-  if (currentStep.value === 1 && !selectedItem.value) return
+  if (currentStep.value === 1 && selectedItems.value.length === 0) return
+  
   if (currentStep.value === 2) {
-    if (!selectedDateTime.value.date) return
-    if (selectedItem.value?.type === 'room' && !selectedDateTime.value.time) return
+    // Validation for step 3 (date/time selection)
+    if (isSingleSelection.value) {
+      // Single selection validation
+      const singleItem = selectedItems.value[0]
+      if (singleItem.type === 'room') {
+        // Room needs complete date/time
+        if (!singleDateTime.value.date || !singleDateTime.value.start_time || !singleDateTime.value.end_time) {
+          return
+        }
+      } else {
+        // Equipment only needs date
+        if (!singleDateTime.value.date) {
+          return
+        }
+      }
+    } else {
+      // Multiple selection validation
+      if (hasRoomSelected.value) {
+        // Check if all rooms have complete date/time selections
+        const roomsValid = roomItems.value.every(room => {
+          const dateTime = selectedDateTimes.value[room.id]
+          return dateTime && 
+                 dateTime.date && 
+                 dateTime.start_time && 
+                 dateTime.end_time
+        })
+        if (!roomsValid) return
+      } else {
+        // For equipment only, just need a date
+        const hasValidDate = Object.values(selectedDateTimes.value).some(dt => dt && dt.date)
+        if (!hasValidDate) return
+      }
+    }
   }
+  
   if (currentStep.value < 3) currentStep.value++
 }
 

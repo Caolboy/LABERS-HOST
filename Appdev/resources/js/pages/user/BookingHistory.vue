@@ -12,7 +12,7 @@
                 <p class="text-orange-100 mb-1" v-else>
                   You have no pending requests.
                 </p>
-                <p class="text-orange-100">Check their status.</p>
+                <p class="text-orange-100">Check their status.</p> 
               </div>
             </div>
           </div>
@@ -109,6 +109,22 @@
         </div>
 
         <div class="space-y-6 md:sticky md:top-6">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-gradient-to-r from-orange-400 to-orange-500 text-white p-4 rounded-2xl relative overflow-hidden">
+              <div class="relative z-10">
+                <h3 class="text-sm font-medium text-orange-100 mb-1">Total Room Bookings</h3>
+                <p class="text-2xl font-bold">{{ roomBookings.length }}</p>
+              </div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-orange-400 to-orange-500 text-white p-4 rounded-2xl relative overflow-hidden">
+              <div class="relative z-10">
+                <h3 class="text-sm font-medium text-orange-100 mb-1">Total Equipment Bookings</h3>
+                <p class="text-2xl font-bold">{{ equipmentBookings.length }}</p>
+              </div>
+            </div>
+          </div>
+
           <div class="bg-white rounded-2xl shadow-sm">
             <div class="p-6">
               <div class="flex justify-between items-center mb-4">

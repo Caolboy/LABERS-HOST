@@ -7,17 +7,17 @@
         </div>
         <h2 class="text-xl font-semibold text-orange-600">Select a Room or Equipment</h2>
       </div>
-      <p class="text-sm text-gray-600 ml-11">Choose the room or equipment you want to book.</p>
+      <p class="text-sm text-gray-600 ml-11">Choose the room or equipment you want to book. You can select multiple items.</p>
     </div>
 
     <div class="space-y-3 mb-8 ml-11">
       <div
         v-for="item in items"
         :key="item.id"
-        @click="selectItem(item)"
+        @click="toggleItem(item)"
         :class="[
           'border rounded-lg p-4 cursor-pointer transition-all duration-200',
-          selectedItem?.id === item.id 
+          isSelected(item) 
             ? 'border-orange-500 bg-orange-50' 
             : 'border-gray-200 hover:border-gray-300'
         ]"
@@ -25,12 +25,13 @@
         <div class="flex items-center">
           <div class="flex-shrink-0 mr-4">
             <div :class="[
-              'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-              selectedItem?.id === item.id 
-                ? 'border-orange-500 bg-orange-500' 
-                : 'border-gray-300'
-            ]">
-              <div v-if="selectedItem?.id === item.id" class="w-2 h-2 bg-white rounded-full"></div>
+                'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                isSelected(item) 
+                  ? 'border-orange-500 bg-orange-500' 
+                  : 'border-gray-300'
+              ]"
+            >
+              <div v-if="isSelected(item)" class="w-2 h-2 bg-white rounded-full"></div>
             </div>
           </div>
           <div class="flex-1">
@@ -54,10 +55,57 @@
             </template>
 
             <template v-else>
-              <p v-if="item.description" class="text-sm text-gray-600">
+              <p v-if="item.description" class="text-sm text-gray-600 mb-2">
                 {{ item.description }}
               </p>
+              <p v-if="item.available_quantity" class="text-xs text-gray-500 mb-2">
+                Available: {{ item.available_quantity }}
+              </p>
+              
+              <!-- Quantity Controls for Equipment -->
+              <div v-if="isSelected(item)" class="flex items-center space-x-2" @click.stop>
+                <span class="text-sm text-gray-600">Quantity:</span>
+                <div class="flex items-center space-x-1">
+                  <button
+                    @click="decrementQuantity(item)"
+                    :disabled="getQuantity(item) <= 1"
+                    class="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                    </svg>
+                  </button>
+                  <span class="w-8 text-center text-sm font-medium">{{ getQuantity(item) }}</span>
+                  <button
+                    @click="incrementQuantity(item)"
+                    :disabled="getQuantity(item) >= item.available_quantity"
+                    class="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected Items Summary -->
+    <div v-if="selectedItems.length > 0" class="mb-6 ml-11">
+      <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+        <h4 class="font-medium text-orange-800 mb-2">Selected Items ({{ selectedItems.length }})</h4>
+        <div class="space-y-1">
+          <div v-for="selected in selectedItems" :key="selected.id" class="flex justify-between items-center text-sm">
+            <span class="text-gray-700">
+              {{ selected.name }} 
+              <span class="text-gray-500">({{ selected.type }})</span>
+            </span>
+            <span v-if="selected.type === 'equipment'" class="text-orange-600 font-medium">
+              Qty: {{ selected.quantity }}
+            </span>
           </div>
         </div>
       </div>
@@ -73,11 +121,11 @@
       <button
         :class="[
           'px-6 py-2 rounded-lg font-medium transition-all duration-200',
-          selectedItem 
+          selectedItems.length > 0
             ? 'bg-orange-500 text-white hover:bg-orange-600' 
             : 'bg-gray-200 text-gray-400 cursor-not-allowed'
         ]"
-        :disabled="!selectedItem"
+        :disabled="selectedItems.length === 0"
         @click="$emit('next')"
       >
         Next →
@@ -87,14 +135,67 @@
 </template>
 
 <script setup>
+import { ref, computed, watch } from 'vue'
+
 const props = defineProps({
   items: Array,
-  selectedItem: Object,
+  selectedItem: [Object, Array], // Can be single item or array of items
 })
 
 const emit = defineEmits(['update:selectedItem', 'next', 'back'])
 
-function selectItem(item) {
-  emit('update:selectedItem', item)
+// Internal state for selected items with quantities
+const selectedItems = ref([])
+
+// Initialize selectedItems from props
+watch(() => props.selectedItem, (newValue) => {
+  if (Array.isArray(newValue)) {
+    selectedItems.value = [...newValue]
+  } else if (newValue) {
+    selectedItems.value = [{ ...newValue, quantity: newValue.quantity || 1 }]
+  } else {
+    selectedItems.value = []
+  }
+}, { immediate: true })
+
+// Emit changes to parent
+watch(selectedItems, (newValue) => {
+  emit('update:selectedItem', newValue)
+}, { deep: true })
+
+function isSelected(item) {
+  return selectedItems.value.some(selected => selected.id === item.id && selected.type === item.type)
+}
+
+function toggleItem(item) {
+  const index = selectedItems.value.findIndex(selected => selected.id === item.id && selected.type === item.type)
+  
+  if (index > -1) {
+    // Remove item
+    selectedItems.value.splice(index, 1)
+  } else {
+    // Add item with default quantity
+    const newItem = { ...item, quantity: 1 }
+    selectedItems.value.push(newItem)
+  }
+}
+
+function getQuantity(item) {
+  const selected = selectedItems.value.find(selected => selected.id === item.id && selected.type === item.type)
+  return selected ? selected.quantity : 1
+}
+
+function incrementQuantity(item) {
+  const selected = selectedItems.value.find(selected => selected.id === item.id && selected.type === item.type)
+  if (selected && selected.quantity < item.available_quantity) {
+    selected.quantity++
+  }
+}
+
+function decrementQuantity(item) {
+  const selected = selectedItems.value.find(selected => selected.id === item.id && selected.type === item.type)
+  if (selected && selected.quantity > 1) {
+    selected.quantity--
+  }
 }
 </script>

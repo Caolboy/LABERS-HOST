@@ -67,20 +67,20 @@ const closeTermsModal = () => {
                 </div>
                 <form @submit.prevent="submit" class="flex flex-col">
                     <div class="mb-4">
-                        <Label for="email" class="text-[#4E413B] font-semibold mb-2 block text-base">Student ID</Label>
-                        <div class="relative mt-1">
-                            <Input
-                                id="email"
-                                type="text"
-                                required
-                                autofocus
-                                :tabindex="1"
-                                autocomplete="email"
-                                v-model="form.email"
-                                class="pr-40 text-base border border-white/30 focus:border-white focus:ring-1 focus:ring-white placeholder:text-gray-400 placeholder:text-lg h-10 text-[#4E413B] bg-white"
-                            />
-                            <span class="absolute inset-y-0 right-3 flex items-center text-[#b0b0b0] text-sm select-none pointer-events-none"></span>
+                        <div class="flex items-center justify-between mb-2">
+                        <Label for="email" class="text-[#4E413B] font-semibold mb-2 block text-base">Domain Email</Label>
                         </div>
+                        <Input
+                            id="email"
+                            type="text"
+                            required
+                            autofocus
+                            :tabindex="1"
+                            autocomplete="email"
+                            v-model="form.email"
+                            placeholder="e.g. 202310838@gordoncollege.edu.ph"
+                            class="text-base border border-white/30 focus:border-white focus:ring-1 focus:ring-white placeholder:text-gray-400 placeholder:text-sm h-10 text-[#4E413B] bg-white"
+                        />
                         <InputError :message="form.errors.email" class="text-[#FD7C21] mt-2" />
                     </div>
                     <div class="mb-4">
@@ -95,7 +95,7 @@ const closeTermsModal = () => {
                             autocomplete="current-password"
                             v-model="form.password"
                             placeholder="Enter your password"
-                            class="text-base border border-white/30 focus:border-white focus:ring-1 focus:ring-white placeholder:text-white placeholder:text-lg placeholder:text-white/70 h-10 bg-white"
+                            class="text-base border border-white/30 focus:border-white focus:ring-1 focus:ring-white placeholder:text-gray-400 placeholder:text-sm h-10 bg-white"
                         />
                         <InputError :message="form.errors.password" class="text-[#FD7C21] mt-2" />
                     </div>

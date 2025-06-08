@@ -19,6 +19,7 @@ Route::get  ('/bookings', [BookingController::class, 'getUserBookings']);
 Route::post ('/bookings/{id}/cancel', [BookingController::class, 'cancelBooking']);
 Route::get('/dashboard-data', [BookingController::class, 'getDashboardData']);
 Route::get('/rooms', [BookingController::class, 'getRooms']);
+Route::get('/booked-slots', [BookingController::class, 'getBookedSlots']);
 Route::get('/calendar-availability', [UserCalendarController::class, 'availability']);
 Route::get('/labsandequipment', [LabEquipmentController::class, 'index'])->name('labsandequipment');
 
