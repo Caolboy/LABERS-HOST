@@ -30,13 +30,13 @@ COPY . /var/www/html
 # Copy SSL CA certificate into container (adjust path if needed)
 COPY ca.pem /etc/ssl/certs/ca.pem
 
-# Install PHP dependencies without dev and optimize autoloader (skip scripts)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+# Install PHP dependencies without dev and optimize autoloader (scripts will run)
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Clear config and cache before migrations
+# Run config cache clearing commands
 RUN php artisan config:clear && php artisan cache:clear
 
-# Run Laravel migrations and seeders (force to run in production)
+# Run Laravel migrations and seeders
 RUN php artisan migrate --force && php artisan db:seed --force
 
 # Install Node.js dependencies and build assets
