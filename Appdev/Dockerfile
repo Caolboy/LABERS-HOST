@@ -50,4 +50,5 @@ EXPOSE 80
 # Clear config and cache at container startup then start Apache
 CMD php artisan config:clear && \
     php artisan cache:clear && \
+    php artisan config:cache && \
     apache2-foreground
