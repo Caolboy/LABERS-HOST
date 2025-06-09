@@ -33,9 +33,6 @@ COPY ca.pem /etc/ssl/certs/ca.pem
 # Install PHP dependencies without dev and optimize autoloader (scripts will run)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Run Laravel migrations and seeders
-RUN php artisan migrate --force && php artisan db:seed --force
-
 # Install Node.js dependencies and build assets
 RUN npm install && npm run build
 
