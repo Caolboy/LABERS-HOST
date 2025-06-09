@@ -27,8 +27,14 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Copy application files
 COPY . /var/www/html
 
+# Copy SSL CA certificate into container (adjust path if needed)
+COPY ca.pem /etc/ssl/certs/ca.pem
+
 # Install PHP dependencies without dev and optimize autoloader
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Run Laravel migrations and seeders
+RUN php artisan migrate --force && php artisan db:seed --force
 
 # Install Node.js dependencies and build assets
 RUN npm install && npm run build
