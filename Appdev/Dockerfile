@@ -22,13 +22,14 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy project files
-COPY . .
-
+# Copy only composer files first for dependency install caching
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Copy the rest of the application files
+COPY . .
 
 # Install Node and npm dependencies, build assets
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
