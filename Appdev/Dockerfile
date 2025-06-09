@@ -27,6 +27,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Copy application files
 COPY . /var/www/html
 
+# Copy environment file explicitly
+COPY .env /var/www/html/.env
+
 # Copy SSL CA certificate into container (adjust path if needed)
 COPY ca.pem /etc/ssl/certs/ca.pem
 
