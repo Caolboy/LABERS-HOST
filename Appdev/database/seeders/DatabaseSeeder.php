@@ -18,7 +18,6 @@ class DatabaseSeeder extends Seeder
             LabsTableSeeder::class,              // Seed the labs
             RoomsTableSeeder::class,             // Seed the rooms
             EquipmentTableSeeder::class,         // Seed the equipment
-            TimeslotsTableSeeder::class,         // Seed the time slots
         ]);
     }
 }
