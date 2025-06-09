@@ -27,17 +27,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Copy application files
 COPY . /var/www/html
 
-# Copy environment file explicitly
-COPY .env /var/www/html/.env
-
 # Copy SSL CA certificate into container (adjust path if needed)
 COPY ca.pem /etc/ssl/certs/ca.pem
 
 # Install PHP dependencies without dev and optimize autoloader (scripts will run)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Run config cache clearing commands
-RUN php artisan config:clear && php artisan cache:clear
 
 # Run Laravel migrations and seeders
 RUN php artisan migrate --force && php artisan db:seed --force
@@ -45,13 +39,16 @@ RUN php artisan migrate --force && php artisan db:seed --force
 # Install Node.js dependencies and build assets
 RUN npm install && npm run build
 
-# Fix permissions for Laravel storage and cache
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# Fix permissions for Laravel storage, cache, and .env file
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/.env
 
 # Change Apache DocumentRoot to /var/www/html/public
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /etc/apache2/sites-available/000-default.conf \
  && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s|AllowOverride None|AllowOverride All|' /etc/apache2/apache2.conf
 
-# Expose port 80 and start Apache in foreground
+# Expose port 80
+
 EXPOSE 80
-CMD ["apache2-foreground"]
+
+# Clear config and cache at container startup then start Apache
+CMD php artisan config:clear && php artisan cache:clear && apache2-foreground
