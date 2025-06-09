@@ -48,8 +48,6 @@ RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /et
 EXPOSE 80
 
 # Clear config and cache at container startup then start Apache
-CMD php artisan migrate --force && \
-    php artisan db:seed --force && \
-    php artisan config:clear && \
+CMD php artisan config:clear && \
     php artisan cache:clear && \
     apache2-foreground
