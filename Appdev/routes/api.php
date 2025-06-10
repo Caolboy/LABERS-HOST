@@ -28,6 +28,7 @@ Route::get('/admin/room-booking-chart', [DashboardController::class, 'roomBookin
 Route::get('/admin/equipment-booking-chart', [DashboardController::class, 'equipmentBookingChart']);
 
 Route::get('/admin/bookings', [AdminBookingController::class, 'index']);
+Route::put('/admin/bookings/bulk-update', [AdminBookingController::class, 'bulkUpdate']);
 Route::put('/admin/bookings/{id}/status', [AdminBookingController::class, 'update']);
 Route::get('/admin/lab-bookings', [LabBookingController::class, 'index']);
 
