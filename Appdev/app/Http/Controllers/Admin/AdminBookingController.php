@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\BookingApprovedMail;
 use App\Mail\BookingCancelledMail;
+use Illuminate\Support\Facades\DB;
 
 class AdminBookingController extends Controller
 {
@@ -59,7 +60,7 @@ class AdminBookingController extends Controller
                         ->select('lab_bookings.*');
                     break;
                 case 'booking_date':
-                    $labQuery->orderByDesc('booking_date');
+                    $labQuery->orderByDesc('created_at');
                     break;
                 case 'status':
                     $labQuery->orderBy('status');
@@ -93,7 +94,7 @@ class AdminBookingController extends Controller
                         ->select('equipment_bookings.*');
                     break;
                 case 'booking_date':
-                    $equipmentQuery->orderByDesc('booking_date');
+                    $equipmentQuery->orderByDesc('created_at');
                     break;
                 case 'status':
                     $equipmentQuery->orderBy('status');
@@ -160,5 +161,85 @@ class AdminBookingController extends Controller
         }
 
         return response()->json(['message' => 'Booking status updated successfully.']);
+    }
+
+    public function bulkUpdate(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer',
+            'type' => 'required|in:lab,equipment',
+            'status' => 'required|string',
+        ]);
+
+        $ids = $request->input('ids');
+        $type = $request->input('type');
+        $newStatus = $request->input('status');
+
+        if ($type === 'lab') {
+            $request->validate([
+                'status' => 'required|in:pending,approved,cancelled',
+            ]);
+        } else {
+            $request->validate([
+                'status' => 'required|in:pending,approved,cancelled,returned',
+            ]);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            if ($type === 'lab') {
+                $bookings = LabBooking::with('user')->whereIn('id', $ids)->get();
+                
+                foreach ($bookings as $booking) {
+                    $booking->status = $newStatus;
+                    $booking->save();
+
+                    // Send email notifications
+                    if ($newStatus === 'approved') {
+                        Mail::to($booking->user->email)->send(new BookingApprovedMail($booking));
+                    } elseif ($newStatus === 'cancelled') {
+                        Mail::to($booking->user->email)->send(new BookingCancelledMail($booking));
+                    }
+                }
+            } else {
+                $bookings = EquipmentBooking::with('user', 'equipment')->whereIn('id', $ids)->get();
+                
+                foreach ($bookings as $booking) {
+                    $oldStatus = $booking->status;
+                    
+                    if (in_array($newStatus, ['cancelled', 'returned']) && !in_array($oldStatus, ['cancelled', 'returned'])) {
+                        $equipment = $booking->equipment;
+                        $equipment->quantity += $booking->quantity;
+                        $equipment->save();
+                    }
+                    
+                    $booking->status = $newStatus;
+                    $booking->save();
+
+                    // Send email notifications
+                    if ($newStatus === 'approved') {
+                        Mail::to($booking->user->email)->send(new BookingApprovedMail($booking));
+                    } elseif ($newStatus === 'cancelled') {
+                        Mail::to($booking->user->email)->send(new BookingCancelledMail($booking));
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => count($bookings) . ' booking(s) updated successfully.',
+                'updated_count' => count($bookings)
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'An error occurred while updating bookings.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
