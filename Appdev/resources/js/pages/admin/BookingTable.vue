@@ -1,6 +1,41 @@
 <template>
   <div>
-     <transition name="fade-scale">
+    <transition name="fade-scale">
+      <div
+        v-if="showBulkModal"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
+        @click.self="showBulkModal = false"
+      >
+        <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center">
+          <h3 class="text-lg font-semibold mb-4 text-orange-600">
+            {{ bulkAction === 'approved' ? 'Approve Bookings' : 
+               bulkAction === 'cancelled' ? 'Cancel Bookings' : 'Mark as Returned' }}
+          </h3>
+          <p class="mb-6">
+            Are you sure you want to {{ bulkAction === 'approved' ? 'approve' : 
+                                       bulkAction === 'cancelled' ? 'cancel' : 'mark as returned' }} 
+            {{ selectedBookings.length }} booking{{ selectedBookings.length > 1 ? 's' : '' }}?
+          </p>
+          <div class="flex justify-center gap-4">
+            <button
+              @click="confirmBulkAction"
+              class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+            >
+              Yes, {{ bulkAction === 'approved' ? 'Approve' : 
+                      bulkAction === 'cancelled' ? 'Cancel' : 'Mark as Returned' }}
+            </button>
+            <button
+              @click="showBulkModal = false"
+              class="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="fade-scale">
       <div
         v-if="showModal"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
@@ -9,7 +44,7 @@
         <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center">
           <h3 class="text-lg font-semibold mb-4 text-orange-600">Confirm Action</h3>
           <p class="mb-6">
-            Are you sure you want to cancel this booking?
+            Are you sure you want to {{ selectedAction }} this booking?
           </p>
           <div class="flex justify-center gap-4">
             <button
@@ -38,7 +73,7 @@
             <th class="p-3 text-center">Date</th>
             <th v-if="type === 'lab'" class="p-3 text-center">Time</th>
             <th class="p-3 text-center">Status</th>
-            <th class="p-3 text-center">Actions</th>
+            <th class="p-3 text-center w-20">Select</th>
           </tr>
         </thead>
         <tbody>
@@ -66,32 +101,55 @@
               </span>
             </td>
             <td class="p-3 text-center">
-              <div v-if="!isPastBooking(booking)" class="flex justify-center gap-2 flex-wrap">
-                <button
-                  v-if="canApprove(booking.status)"
-                  @click="directAction(booking.id, 'approved')"
-                  class="bg-green-500 text-white px-3 py-1 text-xs rounded hover:bg-green-600"
-                >Approve</button>
-                <button
-                  v-if="canCancel(booking.status)"
-                  @click="openModal(booking.id, 'cancelled')"
-                  class="bg-red-500 text-white px-3 py-1 text-xs rounded hover:bg-red-600"
-                >Cancel</button>
-                <button
-                  v-if="type === 'equipment' && canReturn(booking.status, booking.booking_date)"
-                  @click="directAction(booking.id, 'returned')"
-                  class="bg-blue-500 text-white px-3 py-1 text-xs rounded hover:bg-blue-600"
-                >Returned</button>
-              </div>
+              <input
+                type="checkbox"
+                :value="booking.id"
+                :checked="selectedBookings.includes(booking.id)"
+                @change="toggleSelection(booking.id)"
+                :disabled="isPastBooking(booking)"
+                class="w-5 h-5 rounded border-orange-300 text-orange-600 focus:ring-orange-500 disabled:opacity-50"
+              />
             </td>
           </tr>
           <tr v-if="bookings.data.length === 0">
-            <td colspan="6" class="text-center p-4 text-gray-400">No bookings available.</td>
+            <td :colspan="type === 'lab' ? 6 : 5" class="text-center p-4 text-gray-400">No bookings available.</td>
           </tr>
         </tbody>
       </table>
     </div>
 
+    <div v-if="selectedBookings.length > 0" class="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-orange-700 font-medium">
+          {{ selectedBookings.length }} booking{{ selectedBookings.length > 1 ? 's' : '' }} selected
+        </span>
+        <div class="flex gap-2">
+          <button
+            v-if="canBulkApprove"
+            @click="openBulkModal('approved')"
+            class="bg-green-500 text-white px-4 py-2 text-sm rounded hover:bg-green-600 transition"
+          >
+            Approve Selected
+          </button>
+          <button
+            v-if="canBulkCancel"
+            @click="openBulkModal('cancelled')"
+            class="bg-red-500 text-white px-4 py-2 text-sm rounded hover:bg-red-600 transition"
+          >
+            Cancel Selected
+          </button>
+          <button
+            v-if="canBulkReturn"
+            @click="openBulkModal('returned')"
+            class="bg-blue-500 text-white px-4 py-2 text-sm rounded hover:bg-blue-600 transition"
+          >
+            Mark as Returned
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
     <div v-if="bookings.total > bookings.per_page" class="flex justify-center mt-6 gap-2">
       <button
         :disabled="bookings.current_page === 1"
@@ -109,18 +167,58 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   bookings: Object,
   type: String,
+  selected: Array,
 })
 
-const emit = defineEmits(['update', 'page-change'])
+const emit = defineEmits(['update', 'page-change', 'selection-change', 'bulk-action'])
 
 const showModal = ref(false)
+const showBulkModal = ref(false)
 const selectedBookingId = ref(null)
 const selectedAction = ref('')
+const bulkAction = ref('')
+
+const selectedBookings = ref([...props.selected])
+
+watch(() => props.selected, (newSelected) => {
+  selectedBookings.value = [...newSelected]
+})
+
+const canBulkApprove = computed(() => {
+  return selectedBookings.value.some(id => {
+    const booking = props.bookings.data.find(b => b.id === id)
+    return booking && canApprove(booking.status)
+  })
+})
+
+const canBulkCancel = computed(() => {
+  return selectedBookings.value.some(id => {
+    const booking = props.bookings.data.find(b => b.id === id)
+    return booking && canCancel(booking.status)
+  })
+})
+
+const canBulkReturn = computed(() => {
+  return props.type === 'equipment' && selectedBookings.value.some(id => {
+    const booking = props.bookings.data.find(b => b.id === id)
+    return booking && canReturn(booking.status, booking.booking_date)
+  })
+})
+
+const toggleSelection = (id) => {
+  const index = selectedBookings.value.indexOf(id)
+  if (index > -1) {
+    selectedBookings.value.splice(index, 1)
+  } else {
+    selectedBookings.value.push(id)
+  }
+  emit('selection-change', selectedBookings.value)
+}
 
 const openModal = (id, action) => {
   selectedBookingId.value = id
@@ -128,9 +226,19 @@ const openModal = (id, action) => {
   showModal.value = true
 }
 
+const openBulkModal = (action) => {
+  bulkAction.value = action
+  showBulkModal.value = true
+}
+
 const confirmAction = () => {
   emit('update', selectedBookingId.value, props.type, selectedAction.value)
   showModal.value = false
+}
+
+const confirmBulkAction = () => {
+  emit('bulk-action', bulkAction.value)
+  showBulkModal.value = false
 }
 
 const directAction = (id, action) => {
@@ -152,8 +260,6 @@ const isPastBooking = (booking) => {
 
   return bookingDateOnly < nowDateOnly
 }
-
-
 </script>
 
 <style scoped>
