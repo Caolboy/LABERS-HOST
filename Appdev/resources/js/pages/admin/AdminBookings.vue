@@ -16,6 +16,9 @@ const equipmentSearch = ref('')
 const labSort = ref('booking_date_desc')
 const equipmentSort = ref('booking_date_desc')
 
+const selectedLabBookings = ref([])
+const selectedEquipmentBookings = ref([])
+
 const perPage = 10
 
 const fetchBookings = async () => {
@@ -24,6 +27,8 @@ const fetchBookings = async () => {
     const res = await axios.get('/admin/bookings')
     allLabBookings.value = res.data.lab_bookings
     allEquipmentBookings.value = res.data.equipment_bookings
+    selectedLabBookings.value = []
+    selectedEquipmentBookings.value = []
   } catch (e) {
     console.error(e)
   } finally {
@@ -106,12 +111,57 @@ const pagedEquipmentBookings = computed(() => {
 const labTotalPages = computed(() => Math.ceil(filteredLabBookings.value.length / perPage))
 const equipmentTotalPages = computed(() => Math.ceil(filteredEquipmentBookings.value.length / perPage))
 
+const updateBookingInLocalData = (id, type, newStatus) => {
+  const bookings = type === 'lab' ? allLabBookings.value : allEquipmentBookings.value
+  const booking = bookings.find(b => b.id === id)
+  if (booking) {
+    booking.status = newStatus
+  }
+}
+
+const updateMultipleBookingsInLocalData = (ids, type, newStatus) => {
+  const bookings = type === 'lab' ? allLabBookings.value : allEquipmentBookings.value
+  ids.forEach(id => {
+    const booking = bookings.find(b => b.id === id)
+    if (booking) {
+      booking.status = newStatus
+    }
+  })
+}
+
 const updateStatus = async (id, type, status) => {
   try {
     await axios.put(`/admin/bookings/${id}/status`, { type, status })
-    await fetchBookings() 
+    
+    updateBookingInLocalData(id, type, status)
+    
+    if (type === 'lab') {
+      selectedLabBookings.value = selectedLabBookings.value.filter(selectedId => selectedId !== id)
+    } else {
+      selectedEquipmentBookings.value = selectedEquipmentBookings.value.filter(selectedId => selectedId !== id)
+    }
+    
   } catch (e) {
-    console.error(e)
+    console.error('Error updating booking status:', e)
+    alert('Failed to update booking status. Please try again.')
+  }
+}
+
+const bulkUpdateStatus = async (ids, type, status) => {
+  try {
+    await axios.put('/admin/bookings/bulk-update', { ids, type, status })
+    
+    updateMultipleBookingsInLocalData(ids, type, status)
+    
+    if (type === 'lab') {
+      selectedLabBookings.value = []
+    } else {
+      selectedEquipmentBookings.value = []
+    }
+    
+  } catch (e) {
+    console.error('Error bulk updating booking status:', e)
+    alert('Failed to update booking statuses. Please try again.')
   }
 }
 
@@ -123,15 +173,40 @@ const handleEquipmentPageChange = (page) => {
   if (page >= 1 && page <= equipmentTotalPages.value) equipmentPage.value = page
 }
 
-watch([labSearch, labSort], () => { labPage.value = 1 })
-watch([equipmentSearch, equipmentSort], () => { equipmentPage.value = 1 })
+const handleLabSelectionChange = (selected) => {
+  selectedLabBookings.value = selected
+}
+
+const handleEquipmentSelectionChange = (selected) => {
+  selectedEquipmentBookings.value = selected
+}
+
+const handleLabBulkAction = (action) => {
+  if (selectedLabBookings.value.length > 0) {
+    bulkUpdateStatus(selectedLabBookings.value, 'lab', action)
+  }
+}
+
+const handleEquipmentBulkAction = (action) => {
+  if (selectedEquipmentBookings.value.length > 0) {
+    bulkUpdateStatus(selectedEquipmentBookings.value, 'equipment', action)
+  }
+}
+
+watch([labSearch, labSort], () => { 
+  labPage.value = 1
+  selectedLabBookings.value = []
+})
+watch([equipmentSearch, equipmentSort], () => { 
+  equipmentPage.value = 1
+  selectedEquipmentBookings.value = []
+})
 
 onMounted(fetchBookings)
 </script>
 
 <template>
   <div class="p-6 bg-white rounded-2xl shadow-md">
-
     <div v-if="loading" class="text-center text-gray-500">Loading bookings…</div>
 
     <div v-else>
@@ -152,17 +227,19 @@ onMounted(fetchBookings)
         <BookingTable
           :bookings="{ data: pagedLabBookings, current_page: labPage, last_page: labTotalPages, per_page: perPage, total: filteredLabBookings.length }"
           type="lab"
+          :selected="selectedLabBookings"
           @update="updateStatus"
           @page-change="handleLabPageChange"
+          @selection-change="handleLabSelectionChange"
+          @bulk-action="handleLabBulkAction"
         />
       </div>
     </div>
   </div>
 
-<br>
+  <br>
 
   <div class="p-6 bg-white rounded-2xl shadow-md">
-
     <div v-if="loading" class="text-center text-gray-500">Loading bookings…</div>
 
     <div v-else>
@@ -182,8 +259,11 @@ onMounted(fetchBookings)
         <BookingTable
           :bookings="{ data: pagedEquipmentBookings, current_page: equipmentPage, last_page: equipmentTotalPages, per_page: perPage, total: filteredEquipmentBookings.length }"
           type="equipment"
+          :selected="selectedEquipmentBookings"
           @update="updateStatus"
           @page-change="handleEquipmentPageChange"
+          @selection-change="handleEquipmentSelectionChange"
+          @bulk-action="handleEquipmentBulkAction"
         />
       </div>
     </div>
