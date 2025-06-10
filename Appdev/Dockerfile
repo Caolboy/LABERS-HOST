@@ -51,6 +51,6 @@ EXPOSE 80
 CMD php artisan config:clear && \
     php artisan cache:clear && \
     php artisan config:cache && \
-    php artisan migrate:fresh --seed && \
+    php artisan migrate:fresh --seed --force && \
     apache2-foreground
 
